@@ -1,0 +1,8 @@
+.vscode/
+node_modules/
+out/
+dist/
+coverage/
+.vscode-test/
+*.vsix
+*.tsbuildinfo

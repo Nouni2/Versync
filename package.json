@@ -1,0 +1,112 @@
+{
+  "name": "versync",
+  "displayName": "Versync",
+  "description": "A VS Code extension that synchronizes version numbers across selected project files.",
+  "version": "1.0.0",
+  "publisher": "Nouni2",
+  "license": "MIT",
+  "private": false,
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "keywords": [
+    "version",
+    "versions",
+    "versioning",
+    "semver",
+    "sync",
+    "synchronization",
+    "prerelease",
+    "release",
+    "releases",
+    "bump",
+    "increment",
+    "automation",
+    "metadata",
+    "components",
+    "validation",
+    "tracking",
+    "consistency",
+    "configuration",
+    "git",
+    "tags",
+    "workspace",
+    "updates",
+    "discovery",
+    "version-management",
+    "semantic-versioning",
+    "version-sync",
+    "version-bump",
+    "release-management",
+    "git-tags",
+    "component-versioning"
+  ],
+  "main": "./src/extension.js",
+  "extensionKind": ["workspace"],
+  "activationEvents": ["onStartupFinished"],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Version inspection is available; applying changes requires a trusted workspace."
+    }
+  },
+  "contributes": {
+    "commands": [
+      { "command": "versync.actions", "title": "Version Actions", "category": "Versync" },
+      { "command": "versync.openConfig", "title": "Open Project Configuration", "category": "Versync", "icon": "$(file-code)" },
+      { "command": "versync.setup", "title": "Add Component", "category": "Versync", "icon": "$(add)" },
+      { "command": "versync.discoverTargets", "title": "Find Version Copies", "category": "Versync", "icon": "$(search)" },
+      { "command": "versync.addSelectedTarget", "title": "Track Selected Version", "category": "Versync", "icon": "$(selection)" },
+      { "command": "versync.addTarget", "title": "Add Target Using Pattern", "category": "Versync" },
+      { "command": "versync.setVersion", "title": "Enter Version", "category": "Versync", "icon": "$(edit)" },
+      { "command": "versync.synchronize", "title": "Synchronize Current Version", "category": "Versync" },
+      { "command": "versync.bumpVersion", "title": "Bump Version", "category": "Versync", "icon": "$(arrow-up)" },
+      { "command": "versync.downgradeVersion", "title": "Downgrade Version", "category": "Versync", "icon": "$(arrow-down)" },
+      { "command": "versync.updateTogether", "title": "Update Components Together", "category": "Versync" },
+      { "command": "versync.check", "title": "Check Versions", "category": "Versync", "icon": "$(check)" },
+      { "command": "versync.manage", "title": "Manage Project", "category": "Versync", "icon": "$(gear)" },
+      { "command": "versync.manageComponent", "title": "Manage Component", "category": "Versync", "icon": "$(gear)" },
+      { "command": "versync.editTarget", "title": "Edit or Remove Target", "category": "Versync", "icon": "$(edit)" },
+      { "command": "versync.importSetup", "title": "Import Setup", "category": "Versync" },
+      { "command": "versync.exportSetup", "title": "Export Setup", "category": "Versync" },
+      { "command": "versync.copyTag", "title": "Copy Git Tag", "category": "Versync" },
+      { "command": "versync.openTarget", "title": "Open Version Field", "category": "Versync" }
+    ],
+    "viewsContainers": {
+      "activitybar": [{ "id": "versync", "title": "Versync", "icon": "media/versync.svg" }]
+    },
+    "views": { "versync": [{ "id": "versync.projects", "name": "Projects" }] },
+    "viewsWelcome": [{
+      "view": "versync.projects",
+      "contents": "Open a project folder to manage its versions.\n[Open Folder](command:vscode.openFolder)",
+      "when": "workspaceFolderCount == 0"
+    }],
+    "menus": {
+      "view/title": [
+        { "command": "versync.setup", "when": "view == versync.projects", "group": "navigation@1" },
+        { "command": "versync.check", "when": "view == versync.projects", "group": "navigation@2" },
+        { "command": "versync.manage", "when": "view == versync.projects", "group": "navigation@3" },
+        { "command": "versync.openConfig", "when": "view == versync.projects", "group": "navigation@4" }
+      ],
+      "view/item/context": [
+        { "command": "versync.manage", "when": "view == versync.projects && viewItem == versync.project", "group": "inline" },
+        { "command": "versync.manageComponent", "when": "view == versync.projects && viewItem == versync.component", "group": "inline" },
+        { "command": "versync.setVersion", "when": "view == versync.projects && viewItem == versync.component" },
+        { "command": "versync.bumpVersion", "when": "view == versync.projects && viewItem == versync.component" },
+        { "command": "versync.downgradeVersion", "when": "view == versync.projects && viewItem == versync.component" },
+        { "command": "versync.synchronize", "when": "view == versync.projects && viewItem == versync.component" },
+        { "command": "versync.discoverTargets", "when": "view == versync.projects && viewItem == versync.component" },
+        { "command": "versync.editTarget", "when": "view == versync.projects && viewItem == versync.target", "group": "inline" },
+        { "command": "versync.manageComponent", "when": "view == versync.projects && viewItem == versync.source" }
+      ],
+      "editor/context": [{ "command": "versync.addSelectedTarget", "when": "editorHasSelection", "group": "versync" }],
+      "commandPalette": [
+        { "command": "versync.openTarget", "when": "false" },
+        { "command": "versync.editTarget", "when": "false" }
+      ]
+    }
+  },
+  "scripts": {
+    "package": "node scripts/package.js"
+  },
+  "files": ["src", "media", "README.md", "LICENCE"]
+}
