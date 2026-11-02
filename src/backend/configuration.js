@@ -33,7 +33,7 @@ function location(value, target, caption) {
 }
 
 function parseConfiguration(value) {
-    fields(value, ['components'], 'Configuration');
+    fields(value, ['components', 'statusBarPrefix'], 'Configuration');
     if (!value.components || typeof value.components !== 'object' || Array.isArray(value.components)) throw new Error('components must contain named component objects.');
     const components = Object.entries(value.components).map(([name, component]) => {
         fields(component, ['source', 'targets', 'versioning', 'tagPrefix'], name);
@@ -49,7 +49,8 @@ function parseConfiguration(value) {
             targets: (component.targets || []).map((entry, index) => location(entry, true, `${name} target ${index + 1}`)),
             rules, tagPrefix: component.tagPrefix ?? 'v' };
     });
-    return validateDefinition({ schemaVersion: 1, components });
+    return validateDefinition({ schemaVersion: 1, components,
+        ...(value.statusBarPrefix !== undefined ? { statusBarPrefix: value.statusBarPrefix } : {}) });
 }
 
 function serializeConfiguration(definition, previous = { components: {} }) {
@@ -75,7 +76,8 @@ function serializeConfiguration(definition, previous = { components: {} }) {
         if (target && entry.format !== 'plain') selector.format = entry.format;
         return Object.keys(selector).length === 1 ? selector.file : selector;
     };
-    return { components: Object.fromEntries(definition.components.map(component => [component.name, {
+    return { ...(definition.statusBarPrefix !== undefined ? { statusBarPrefix: definition.statusBarPrefix } : {}),
+        components: Object.fromEntries(definition.components.map(component => [component.name, {
         source: serializeLocation(component.source, false), targets: component.targets.map(entry => serializeLocation(entry, true)),
         ...(component.rules ? { versioning: component.rules.prerelease ? { ...component.rules.prerelease } : 'semver' } : {}),
         ...(component.tagPrefix !== 'v' ? { tagPrefix: component.tagPrefix } : {})

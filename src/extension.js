@@ -17,6 +17,9 @@ function activate(context) {
         vscode.workspace.onDidRenameFiles(event => event.files.forEach(file => { controller.changed(file.oldUri); controller.changed(file.newUri); })),
         vscode.workspace.onDidCreateFiles(event => event.files.forEach(controller.changed)),
         vscode.workspace.onDidDeleteFiles(event => event.files.forEach(controller.changed)),
+        vscode.workspace.onDidChangeConfiguration(event => {
+            if (event.affectsConfiguration('versync.statusBarPrefix')) controller.render();
+        }),
         vscode.workspace.onDidChangeWorkspaceFolders(controller.workspaceFoldersChanged),
         vscode.window.onDidChangeActiveTextEditor(controller.render)
     );

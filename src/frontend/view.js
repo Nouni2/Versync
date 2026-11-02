@@ -129,7 +129,9 @@ function createView(reports, selectedComponent) {
             status.text = '$(versions) Add Component';
             status.tooltip = `Add a versioned component to ${folder.name}.`;
         } else {
-            status.text = `${report.issues.length ? '$(warning)' : '$(versions)'} ${selected.component.name}: ${selected.version || '?'}`;
+            const configuredPrefix = report.definition.statusBarPrefix ?? vscode.workspace.getConfiguration('versync', folder.uri).get('statusBarPrefix', 'v');
+            const prefix = typeof configuredPrefix === 'string' ? configuredPrefix : 'v';
+            status.text = prefix.replace(/\{(project|component)\}/g, (_, name) => name === 'project' ? folder.name : selected.component.name) + (selected.version || '?');
             status.tooltip = report.issues.length ? `${folder.name}: ${report.issues.length} version ${report.issues.length === 1 ? 'issue' : 'issues'}. Click for actions.` :
                 `${folder.name}: ${selected.component.targets.length} target ${selected.component.targets.length === 1 ? 'field' : 'fields'}. Click for actions.`;
         }

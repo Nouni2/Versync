@@ -21,8 +21,11 @@ function validateLocation(location, target, caption) {
 }
 
 function validateDefinition(project) {
-    object(project, ['schemaVersion', 'components'], 'Project setup');
+    object(project, ['schemaVersion', 'components', 'statusBarPrefix'], 'Project setup');
     if (project.schemaVersion !== 1 || !Array.isArray(project.components)) throw new Error('Unsupported project setup format.');
+    if (project.statusBarPrefix !== undefined && (typeof project.statusBarPrefix !== 'string' || /[\x00-\x1f\x7f\u0085\u2028\u2029]/.test(project.statusBarPrefix))) {
+        throw new Error('statusBarPrefix must be text without line breaks or control characters.');
+    }
     const ids = new Set(), names = new Set();
     for (const component of project.components) {
         object(component, ['id', 'name', 'source', 'targets', 'rules', 'tagPrefix'], 'Component');

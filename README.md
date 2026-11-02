@@ -1,4 +1,4 @@
-# Versync v1.0.0
+# Versync v1.0.1
 
 Versync is a VS Code extension that helps you synchronize version numbers across selected project files. You can set a version, bump it using optional versioning rules, or check for mismatches.
 
@@ -17,6 +17,22 @@ Open a project folder in VS Code and select Versync in the Activity Bar.
 To add a field later, select its complete version string and run **Versync: Track Selected Version**. For unusual file syntax, **Add Target Using Pattern** accepts a JavaScript regular expression with a named `(?<version>...)` capture. The pattern must identify one field in that file.
 
 **Bump** and **Downgrade** use the component's semantic versioning rules and show the resulting versions before selection. Downgrading a core number resets the numbers after it to zero and removes prerelease and build suffixes: `2.3.4` can become `2.3.3`, `2.2.0` or `1.0.0`. A prerelease counter can be decreased while it is above zero. Downgrade calculates a lower version; it does not restore previous file contents. Use **Enter Version** for a specific version.
+
+## Version display
+
+In VS Code Settings, search for **Versync: Status Bar Prefix**, or set `versync.statusBarPrefix` in `settings.json`. The default is `"v"`. The prefix changes only the status bar display; it does not alter versions in files. No spaces or punctuation are added automatically.
+
+| Prefix | Display for version `1.2.3` in project `Versync` |
+| --- | --- |
+| `"v"` | `v1.2.3` |
+| `"V"` | `V1.2.3` |
+| `""` | `1.2.3` |
+| `"Release "` | `Release 1.2.3` |
+| `"{project} "` | `Versync 1.2.3` |
+| `"{project} v"` | `Versync v1.2.3` |
+| `"{project} V"` | `Versync V1.2.3` |
+
+`{project}` uses the workspace folder name; `{component}` uses the selected component's name. To override the setting for a file-configured project, add a top-level `"statusBarPrefix": "v"` to `.vscode/versync.json` beside `components`. It is retained when exporting or editing the setup through Versync.
 
 
 ## Target formats
