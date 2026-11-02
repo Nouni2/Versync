@@ -389,16 +389,51 @@ function createController(context) {
         await refresh(folder);
     }
 
+    async function changeVersionPrefix(folder) {
+        const expected = await storage.read(folder.uri);
+        const current = expected.statusBarPrefix ?? vscode.workspace.getConfiguration('versync', folder.uri).get('statusBarPrefix', 'v');
+        const report = reports.get(identity(folder.uri));
+        const selected = report?.components?.find(item => item.component.id === context.workspaceState.get(selectionKey(folder))) || report?.components?.[0];
+        const choices = [
+            { label: 'No prefix', prefix: '' },
+            { label: 'v', prefix: 'v' },
+            { label: 'V', prefix: 'V' },
+            { label: 'Project name', prefix: '{project} ' },
+            { label: 'Project name + v', prefix: '{project} v' },
+            { label: 'Project name + V', prefix: '{project} V' }
+        ].map(choice => ({ ...choice,
+            description: selected?.version ? choice.prefix.replace(/\{project\}/g, () => folder.name) + selected.version : undefined,
+            detail: choice.prefix === current ? 'Current prefix' : undefined
+        }));
+        choices.push({ label: '$(edit) Custom text…', custom: true });
+        const choice = await vscode.window.showQuickPick(choices, {
+            title: 'Version prefix', placeHolder: 'Search prefix options', ignoreFocusOut: true
+        });
+        if (!choice) return;
+        let prefix = choice.prefix;
+        if (choice.custom) {
+            prefix = await input('Version prefix', current, text => {
+                validateDefinition({ ...expected, statusBarPrefix: text });
+            }, 'Text before the version. {project} inserts the project name; {component} inserts the component name. Include any spaces yourself.');
+        }
+        if (prefix === undefined) return;
+        const definition = clone(expected);
+        definition.statusBarPrefix = prefix;
+        await saveDefinition(folder, definition, expected);
+    }
+
     async function manageProject(node) {
         const folder = await chooseFolder(node); if (!folder) return;
         const action = await vscode.window.showQuickPick([
             { label: 'Open project configuration', action: 'config' },
+            { label: '$(edit) Change version prefix', action: 'prefix' },
             { label: 'Add component', action: 'add' }, { label: 'Manage component', action: 'component' },
             { label: 'Export setup', action: 'export' }, { label: 'Import setup', action: 'import' },
             { label: 'Use a saved setup…', action: 'associate' }, { label: 'Reset project setup', action: 'reset' }
         ], { title: `Manage project: ${folder.name}`, placeHolder: 'Search project actions' });
         if (!action) return;
         if (action.action === 'config') return openConfiguration({ folder });
+        if (action.action === 'prefix') return changeVersionPrefix(folder);
         if (action.action === 'add') return addComponent({ folder });
         if (action.action === 'component') return manageComponent({ folder });
         if (['export', 'import'].includes(action.action)) return transfer({ folder }, action.action);

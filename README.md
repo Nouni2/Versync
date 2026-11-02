@@ -20,7 +20,9 @@ To add a field later, select its complete version string and run **Versync: Trac
 
 ## Version display
 
-In VS Code Settings, search for **Versync: Status Bar Prefix**, or set `versync.statusBarPrefix` in `settings.json`. The default is `"v"`. The prefix changes only the status bar display; it does not alter versions in files. No spaces or punctuation are added automatically.
+Open **Manage Project → Change version prefix** from the Versync gear button. Choose no prefix, `v`, `V`, the project name, the project name followed by `v` or `V`, or **Custom text…**. The choices preview the current version. Custom text keeps the spaces you enter.
+
+The default is `"v"`. The prefix changes only the status bar display; it does not alter versions in files. No spaces or punctuation are added automatically. The choice is saved in `.vscode/versync.json` when that file controls the project, otherwise in the project's private setup, and updates the status bar immediately.
 
 | Prefix | Display for version `1.2.3` in project `Versync` |
 | --- | --- |
@@ -32,7 +34,9 @@ In VS Code Settings, search for **Versync: Status Bar Prefix**, or set `versync.
 | `"{project} v"` | `Versync v1.2.3` |
 | `"{project} V"` | `Versync V1.2.3` |
 
-`{project}` uses the workspace folder name; `{component}` uses the selected component's name. To override the setting for a file-configured project, add a top-level `"statusBarPrefix": "v"` to `.vscode/versync.json` beside `components`. It is retained when exporting or editing the setup through Versync.
+`{project}` uses the workspace folder name; `{component}` uses the selected component's name. The prefix is retained when exporting or editing the setup through Versync. You can also edit the top-level `statusBarPrefix` in `.vscode/versync.json` beside `components`.
+
+For projects without a saved prefix, **Versync: Status Bar Prefix** in VS Code Settings (`versync.statusBarPrefix`) supplies the default.
 
 
 ## Target formats
