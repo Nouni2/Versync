@@ -5,7 +5,8 @@ const vscode = require('vscode');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const { constants } = require('node:fs');
-const { validateDefinition } = require('./definition');
+const { validateDefinition, metadataComponent } = require('./definition');
+const { property } = require('./json');
 const { validatePath, locate, checkOverlaps, selectionPattern, defaultLocation } = require('./locations');
 const { FORMATS, validateVersion, parseVersion, formatVersion } = require('./version');
 const { CONFIG_FILE } = require('./configuration');
@@ -100,6 +101,13 @@ async function inspectProject(folder, definition) {
                 report.issues.push({ severity: 'error', message: `${component.name}: ${error.message}`, uri: source.snapshot.uri, range: source.range });
             }
         }
+        if (definition.fileConfiguration && metadataComponent(definition)?.id === component.id) {
+            const snapshot = result.documents.get(identity(definition.fileConfiguration.uri));
+            const capture = property(snapshot.text, ['metadata', 'version']);
+            report.entries.push({ file: CONFIG_FILE, metadata: true, source: false, index: 'metadata', format: 'plain',
+                caption: `${component.name} metadata.version (${CONFIG_FILE})`, componentId: component.id,
+                ...capture, snapshot, range: range(snapshot, capture.start, capture.end) });
+        }
         if (report.version) {
             for (const entry of report.entries.filter(item => !item.source)) {
                 try {
@@ -136,13 +144,14 @@ function validateProjectedChanges(inspection, changes) {
         const edits = changes.filter(change => change.snapshot === snapshot).sort((a, b) => b.start - a.start);
         if (!edits.length) continue;
         let text = snapshot.text;
-        for (const edit of edits) text = text.slice(0, edit.start) + edit.next + text.slice(edit.end);
+        for (const edit of edits) text = text.slice(0, edit.start) + edit.replacement + text.slice(edit.end);
         for (const entry of inspection.components.flatMap(report => report.entries).filter(entry => entry.snapshot === snapshot)) {
             const change = edits.find(edit => edit.componentId === entry.componentId && edit.source === entry.source && edit.index === entry.index);
             const expected = change ? change.next : entry.value;
-            const offset = edits.filter(edit => edit.end <= entry.start).reduce((sum, edit) => sum + edit.next.length - (edit.end - edit.start), 0);
-            const projected = locate(text, entry.pattern, entry.caption);
-            if (projected.value !== expected || projected.start !== entry.start + offset || projected.end !== entry.start + offset + expected.length) {
+            const offset = edits.filter(edit => edit.end <= entry.start).reduce((sum, edit) => sum + edit.replacement.length - (edit.end - edit.start), 0);
+            const projected = entry.metadata ? property(text, ['metadata', 'version']) : locate(text, entry.pattern, entry.caption);
+            const length = entry.metadata ? JSON.stringify(expected).length : expected.length;
+            if (projected.value !== expected || projected.start !== entry.start + offset || projected.end !== entry.start + offset + length) {
                 throw new Error(`${entry.caption}: its pattern would no longer identify the same field after this update. Edit the pattern first.`);
             }
         }
@@ -151,6 +160,7 @@ function validateProjectedChanges(inspection, changes) {
 
 async function planChanges(folder, definition, requests) {
     if (!Array.isArray(requests) || !requests.length) throw new Error('Choose at least one component.');
+    if (metadataComponent(definition) && !definition.fileConfiguration) throw new Error('Open Project Configuration to track metadata.version in the project JSON file.');
     const inspection = await inspectProject(folder, definition);
     const error = inspection.issues.find(issue => issue.severity === 'error');
     if (error) throw new Error(error.message);
@@ -166,29 +176,25 @@ async function planChanges(folder, definition, requests) {
         versions.push({ name: report.component.name, previous: report.version, next: request.next });
         for (const entry of report.entries) {
             const next = entry.source ? request.next : formatVersion(request.next, entry.format);
-            if (entry.value !== next) changes.push({ ...entry, next });
+            if (entry.value !== next) changes.push({ ...entry, next, replacement: entry.metadata ? JSON.stringify(next) : next });
         }
     }
     validateProjectedChanges(inspection, changes);
-    const writeDocuments = new Set(inspection.components.filter(report => ids.has(report.component.id)).flatMap(report => report.entries.map(entry => entry.snapshot)));
-    for (const snapshot of writeDocuments) await ensureWritable(snapshot);
     assertUnchanged(inspection.documents);
-    return { ...inspection, changes, versions, writeDocuments };
+    return { ...inspection, changes, versions };
 }
 
-async function applyChanges(plan) {
+async function applyChanges(plan, selected = plan.changes) {
     if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before changing versions.');
-    if (!plan.changes.length) return false;
-    for (const snapshot of plan.writeDocuments) await ensureWritable(snapshot);
+    if (!selected.length) return false;
+    if (new Set(selected).size !== selected.length || selected.some(change => !plan.changes.includes(change))) throw new Error('Choose changes from the current preview.');
+    for (const snapshot of new Set(selected.map(change => change.snapshot))) await ensureWritable(snapshot);
     assertUnchanged(plan.documents);
+    validateProjectedChanges(plan, selected);
     const edit = new vscode.WorkspaceEdit();
-    const metadata = {
-        needsConfirmation: true,
-        label: plan.versions.map(version => `${version.name}: ${version.previous} → ${version.next}`).join(', '),
-        iconPath: new vscode.ThemeIcon('versions')
-    };
-    for (const change of plan.changes) edit.replace(change.snapshot.uri, change.range, change.next, metadata);
-    return vscode.workspace.applyEdit(edit, { isRefactoring: true });
+    for (const change of selected) edit.replace(change.snapshot.uri, change.range, change.replacement);
+    if (!await vscode.workspace.applyEdit(edit)) throw new Error('Could not apply the selected changes. Review a new preview.');
+    return true;
 }
 
 async function discoverSources(folder) {

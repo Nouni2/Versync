@@ -33,7 +33,8 @@ function location(value, target, caption) {
 }
 
 function parseConfiguration(value) {
-    fields(value, ['components', 'statusBarPrefix'], 'Configuration');
+    fields(value, ['components', 'statusBarPrefix', 'metadata'], 'Configuration');
+    if (value.metadata !== undefined) fields(value.metadata, ['name', 'version', 'component'], 'Project metadata');
     if (!value.components || typeof value.components !== 'object' || Array.isArray(value.components)) throw new Error('components must contain named component objects.');
     const components = Object.entries(value.components).map(([name, component]) => {
         fields(component, ['source', 'targets', 'versioning', 'tagPrefix'], name);
@@ -50,6 +51,7 @@ function parseConfiguration(value) {
             rules, tagPrefix: component.tagPrefix ?? 'v' };
     });
     return validateDefinition({ schemaVersion: 1, components,
+        ...(value.metadata !== undefined ? { metadata: { ...value.metadata } } : {}),
         ...(value.statusBarPrefix !== undefined ? { statusBarPrefix: value.statusBarPrefix } : {}) });
 }
 
@@ -76,7 +78,8 @@ function serializeConfiguration(definition, previous = { components: {} }) {
         if (target && entry.format !== 'plain') selector.format = entry.format;
         return Object.keys(selector).length === 1 ? selector.file : selector;
     };
-    return { ...(definition.statusBarPrefix !== undefined ? { statusBarPrefix: definition.statusBarPrefix } : {}),
+    return { ...(definition.metadata !== undefined ? { metadata: { ...definition.metadata } } : {}),
+        ...(definition.statusBarPrefix !== undefined ? { statusBarPrefix: definition.statusBarPrefix } : {}),
         components: Object.fromEntries(definition.components.map(component => [component.name, {
         source: serializeLocation(component.source, false), targets: component.targets.map(entry => serializeLocation(entry, true)),
         ...(component.rules ? { versioning: component.rules.prerelease ? { ...component.rules.prerelease } : 'semver' } : {}),

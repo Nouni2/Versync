@@ -1,4 +1,4 @@
-# Versync v1.0.1
+# Versync v1.1.0
 
 Versync is a VS Code extension that helps you synchronize version numbers across selected project files. You can set a version, bump it using optional versioning rules, or check for mismatches.
 
@@ -11,7 +11,7 @@ Open a project folder in VS Code and select Versync in the Activity Bar.
 1. Choose **Add Component**. Select the version source from the detected fields, or use a version selected in the editor. Versync searches for sources in `package.json`, `Directory.Build.props`, `pyproject.toml` and `VERSION` files by default.
 2. Name the component and choose **Manual versions** or semantic versioning rules.
 3. Use **Find Version Copies** to review possible targets. Select the fields to track and their formats. Discovery leaves fields unregistered until you select them.
-4. Click the Versync status bar item or a component to open its actions: **Bump**, **Check**, **Downgrade** or **Enter Version**. Version edits open VS Code's **Refactor Preview**, where you can inspect the diffs, select the changes and use **Apply** or **Discard**. Select all proposed edits to keep the source and targets synchronized. The gear button opens project management; **Synchronize Current Version** is also available from the Command Palette.
+4. Click the Versync status bar item or a component to open its actions: **Bump**, **Check**, **Downgrade** or **Enter Version**. Version edits open **Versync: Review Changes**, showing the version transition, file count and change count. Click a change to inspect its diff. Use **Check All / Uncheck All**, then **Apply Selected** for checked changes or **Apply All** for every proposed change, including unchecked changes. **Discard** closes the preview without applying it. Apply all proposed edits to keep the source, targets and metadata version synchronized. The gear button opens project management; **Synchronize Current Version** is also available from the Command Palette.
 5. Review and save the edited documents. Your VS Code Auto Save settings apply.
 
 To add a field later, select its complete version string and run **Versync: Track Selected Version**. For unusual file syntax, **Add Target Using Pattern** accepts a JavaScript regular expression with a named `(?<version>...)` capture. The pattern must identify one field in that file.
@@ -34,7 +34,7 @@ The default is `"v"`. The prefix changes only the status bar display; it does no
 | `"{project} v"` | `Versync v1.2.3` |
 | `"{project} V"` | `Versync V1.2.3` |
 
-`{project}` uses the workspace folder name; `{component}` uses the selected component's name. The prefix is retained when exporting or editing the setup through Versync. You can also edit the top-level `statusBarPrefix` in `.vscode/versync.json` beside `components`.
+`{project}` uses `metadata.name` when configured, otherwise the workspace folder name; `{component}` uses the selected component's name. The prefix is retained when exporting or editing the setup through Versync. You can also edit the top-level `statusBarPrefix` in `.vscode/versync.json` beside `components`.
 
 For projects without a saved prefix, **Versync: Status Bar Prefix** in VS Code Settings (`versync.statusBarPrefix`) supplies the default.
 
@@ -51,8 +51,25 @@ By default, Versync stores component definitions in VS Code. To control the setu
 
 While this file exists, it is the only source of setup. UI changes update the file, and edits to the file refresh the extension. An empty component list stays empty; invalid configuration reports an error instead of loading private settings. Current versions remain in the source files you name.
 
+## Project metadata
+
+Use **Manage Project → Configure project metadata** to set a project name and select the component whose version your build tools should read. This creates `.vscode/versync.json` if needed. Its optional `metadata` object contains `name`, `component` and `version`. The project row shows the metadata version; the status bar tooltip includes it, and `{project}` uses the metadata name.
+
+`metadata.version` is an informative, plain version copy. The selected component's source file remains authoritative. Version changes include the metadata field in the same review as other targets. **Check Versions** reports a mismatch when it differs from its source; **Synchronize Current Version** proposes repairing it. Unchecking that edit leaves the metadata unchanged, just as with any other target.
+
+Build tools can read `.vscode/versync.json` at `metadata.version` and use it to select output folders such as `build/publish/v1.0.0/` and `build/publish/v1.0.1/`. Save the edited documents before building; changes in unsaved editors are not yet available to tools reading from disk.
+
+New configuration files populate metadata from the source automatically when there is one component with a readable, valid version. With multiple components, use **Configure project metadata** to select one explicitly. A name-only metadata object is allowed without enabling version tracking. When `version` is supplied, `component` can be omitted only for a single-component project; setting it explicitly keeps the association clear if more components are added. Renaming the selected component updates the reference, and removing it removes the metadata version and reference while keeping the project name.
+
+Existing configurations without metadata and earlier setup import formats remain supported. Metadata is preserved when editing, importing and exporting setups. Importing metadata creates the configuration file if the project previously used private storage. Earlier extension releases reject the new metadata field; use 1.1.0 or later for configurations that contain it.
+
 ```json
 {
+  "metadata": {
+    "name": "Interface",
+    "component": "Interface",
+    "version": "1.2.3"
+  },
   "components": {
     "Interface": {
       "source": "package.json",
@@ -92,6 +109,8 @@ From the repository folder, run:
 ```powershell
 npm run package
 ```
+
+The package is written to `build/publish/v<version>/<name>-<version>.vsix` using the name and version in `package.json`. For 1.1.0, the output is `build/publish/v1.1.0/ver-sync-1.1.0.vsix`.
 
 In VS Code, run **Extensions: Install from VSIX...** and select the generated `.vsix` file. The extension requires VS Code 1.85 or later. The package script uses Node.js without third-party dependencies.
 

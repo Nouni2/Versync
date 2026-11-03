@@ -8,7 +8,8 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-const output = path.join(root, `versync-${manifest.version}.vsix`);
+const outputDirectory = path.join(root, 'build', 'publish', `v${manifest.version}`);
+const output = path.join(outputDirectory, `${manifest.name}-${manifest.version}.vsix`);
 
 function xml(value) {
     return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -128,5 +129,6 @@ const entries = [
     { name: 'extension/package.json', data: fs.readFileSync(path.join(root, 'package.json')) },
     ...packageEntries()
 ];
+fs.mkdirSync(outputDirectory, { recursive: true });
 fs.writeFileSync(output, zip(entries));
 console.log(`Packaged ${output} (${entries.length} files)`);

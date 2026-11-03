@@ -1,8 +1,8 @@
 {
-  "name": "versync",
-  "displayName": "Versync",
+  "name": "ver-sync",
+  "displayName": "VerSync",
   "description": "A VS Code extension that synchronizes version numbers across selected project files.",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "publisher": "Nouni2",
   "license": "MIT",
   "private": false,
@@ -58,7 +58,7 @@
           "default": "v",
           "scope": "resource",
           "pattern": "^[^\\u0000-\\u001f\\u007f\\u0085\\u2028\\u2029]*$",
-          "markdownDescription": "Default text before the status bar version. Use `v`, `V`, an empty string, or custom text. `{project}` inserts the workspace folder name; `{component}` inserts the component name. Include any spaces yourself, for example `{project} v`. No separator is added. A prefix chosen through Manage Project or set as `statusBarPrefix` in `.vscode/versync.json` overrides this setting."
+          "markdownDescription": "Default text before the status bar version. Use `v`, `V`, an empty string, or custom text. `{project}` inserts the metadata project name, falling back to the workspace folder name; `{component}` inserts the component name. Include any spaces yourself, for example `{project} v`. No separator is added. A prefix chosen through Manage Project or set as `statusBarPrefix` in `.vscode/versync.json` overrides this setting."
         }
       }
     },

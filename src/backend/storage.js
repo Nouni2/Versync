@@ -4,7 +4,7 @@
 const { validateDefinition } = require('./definition');
 const vscode = require('vscode');
 const { CONFIG_FILE, parseConfiguration, serializeConfiguration } = require('./configuration');
-const { openProjectFile } = require('./project');
+const { openProjectFile, inspectProject, assertUnchanged } = require('./project');
 
 const PREFIX = 'project:';
 const copy = value => JSON.parse(JSON.stringify(value));
@@ -73,11 +73,22 @@ function createStorage(state) {
             if (await fileConfiguration(uri)) throw new Error(`This project is controlled by ${CONFIG_FILE}. Edit that file to remove components.`);
             await state.update(projectKey(uri), undefined);
         },
-        async createFile(uri) {
+        async createFile(uri, name) {
             if (await fileConfiguration(uri)) return vscode.Uri.joinPath(uri, ...CONFIG_FILE.split('/'));
             if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before creating project configuration.');
             const value = state.get(projectKey(uri));
-            const definition = value === undefined ? { schemaVersion: 1, components: [] } : validateDefinition(value);
+            const definition = value === undefined ? { schemaVersion: 1, components: [] } : copy(validateDefinition(value));
+            if (definition.metadata === undefined) {
+                definition.metadata = { name };
+                if (definition.components.length === 1) {
+                    const inspection = await inspectProject({ uri }, definition), report = inspection.components[0];
+                    if (report.version) {
+                        definition.metadata.component = report.component.name;
+                        definition.metadata.version = report.version;
+                    }
+                    assertUnchanged(inspection.documents);
+                }
+            }
             const fileUri = vscode.Uri.joinPath(uri, ...CONFIG_FILE.split('/'));
             await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(uri, '.vscode'));
             const edit = new vscode.WorkspaceEdit();

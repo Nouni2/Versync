@@ -4,11 +4,12 @@
 const vscode = require('vscode');
 const { createStorage } = require('../backend/storage');
 const { CONFIG_FILE, componentId, parseConfiguration, serializeConfiguration } = require('../backend/configuration');
-const { validateDefinition, importDefinition } = require('../backend/definition');
+const { validateDefinition, importDefinition, metadataComponent } = require('../backend/definition');
 const { validateVersion, parseVersion, bumpVersion, downgradeVersion, formatTag } = require('../backend/version');
 const { identity, inspectProject, planChanges, applyChanges, discoverTargets, assertUnchanged, relativeFile } = require('../backend/project');
 const { input, patternLocation, selectedLocation, sourceLocation, chooseFormat, chooseRules, definitionLocation, formatLabel, formatChoices } = require('./configuration');
 const { createView } = require('./view');
+const { createPreview } = require('./preview');
 
 const clone = value => JSON.parse(JSON.stringify(value));
 
@@ -19,6 +20,7 @@ function createController(context) {
     let pendingWrite = Promise.resolve();
     const selectionKey = folder => 'selected:' + identity(folder.uri);
     const view = createView(reports, folder => context.workspaceState.get(selectionKey(folder)));
+    const preview = createPreview();
 
     function write(action) {
         const result = pendingWrite.then(() => {
@@ -122,6 +124,7 @@ function createController(context) {
         await write(async () => {
             if (!vscode.workspace.workspaceFolders?.some(item => identity(item.uri) === identity(folder.uri))) throw new Error('The project folder is no longer open.');
             await storage.write(folder.uri, definition, expected);
+            if (definition.metadata !== undefined && !expected.fileConfiguration) await storage.createFile(folder.uri, folder.name);
         });
         return refresh(folder);
     }
@@ -137,7 +140,11 @@ function createController(context) {
         if (name === undefined) return;
         const rules = await chooseRules(source.value); if (rules === undefined) return;
         const component = { id: componentId(name), name, source: definitionLocation(source), targets: [], rules, tagPrefix: 'v' };
-        const definition = clone(expected); definition.components.push(component);
+        const definition = clone(expected);
+        const linked = metadataComponent(definition);
+        if (linked) definition.metadata.component = linked.name;
+        if (definition.metadata && !definition.components.length) Object.assign(definition.metadata, { component: name, version: source.value });
+        definition.components.push(component);
         const inspection = await inspectProject(folder, definition);
         const error = inspection.issues.find(issue => issue.severity === 'error');
         if (error) throw new Error(error.message);
@@ -214,15 +221,18 @@ function createController(context) {
     async function commitPlan(folder, definition, requests) {
         const plan = await planChanges(folder, definition, requests);
         if (!plan.changes.length) { await vscode.window.showInformationMessage('The selected versions are already synchronized.'); return; }
-        const applied = await write(async () => {
-            if (!vscode.workspace.workspaceFolders?.some(item => identity(item.uri) === identity(folder.uri))) throw new Error('The project folder is no longer open.');
-            if (JSON.stringify(await storage.read(folder.uri)) !== JSON.stringify(definition)) throw new Error('The setup changed. Review a new preview.');
-            return applyChanges(plan);
+        await preview.review(plan, async selected => {
+            const applied = await write(async () => {
+                if (!vscode.workspace.workspaceFolders?.some(item => identity(item.uri) === identity(folder.uri))) throw new Error('The project folder is no longer open.');
+                if (JSON.stringify(await storage.read(folder.uri)) !== JSON.stringify(definition)) throw new Error('The setup changed. Review a new preview.');
+                return applyChanges(plan, selected);
+            });
+            const report = await refresh(folder);
+            if (applied && report?.issues?.length) {
+                void vscode.window.showWarningMessage('Some tracked versions still differ or could not be read. See the Problems panel.');
+            }
+            return applied;
         });
-        const report = await refresh(folder);
-        if (applied && report?.issues?.length) {
-            void vscode.window.showWarningMessage('Some tracked versions still differ or could not be read. See the Problems panel.');
-        }
     }
 
     async function versionAction(node, action) {
@@ -273,7 +283,7 @@ function createController(context) {
         const report = await refresh(folder); if (report.error) throw new Error(report.error);
         if (!report.components.length) { await vscode.window.showInformationMessage('Add a component to start tracking versions.'); return; }
         if (report.issues.length) await vscode.window.showWarningMessage(`${report.issues.length} version ${report.issues.length === 1 ? 'issue' : 'issues'}. See the Problems panel.`);
-        else if (!report.definition.components.some(component => component.targets.length)) await vscode.window.showInformationMessage('Version sources are valid. No target fields have been added.');
+        else if (!metadataComponent(report.definition) && !report.definition.components.some(component => component.targets.length)) await vscode.window.showInformationMessage('Version sources are valid. No target fields have been added.');
         else await vscode.window.showInformationMessage('All tracked versions match their sources.');
     }
 
@@ -291,9 +301,13 @@ function createController(context) {
         if (action.action === 'target') return editTarget({ folder, componentId: component.id });
         if (action.action === 'name') {
             const name = await input('Component name', component.name, value => {
-                const proposed = clone(definition); proposed.components.find(item => item.id === component.id).name = value; validateDefinition(proposed);
+                const proposed = clone(definition);
+                if (metadataComponent(proposed)?.id === component.id) proposed.metadata.component = value;
+                proposed.components.find(item => item.id === component.id).name = value; validateDefinition(proposed);
             });
-            if (name === undefined) return; component.name = name;
+            if (name === undefined) return;
+            if (metadataComponent(definition)?.id === component.id) definition.metadata.component = name;
+            component.name = name;
         } else if (action.action === 'source') {
             const source = await sourceLocation(folder); if (!source) return;
             component.source = definitionLocation(source);
@@ -312,7 +326,9 @@ function createController(context) {
             const prefix = await input('Git tag prefix', component.tagPrefix, value => formatTag(report.version, value));
             if (prefix === undefined) return; component.tagPrefix = prefix;
         } else {
-            if (await vscode.window.showWarningMessage(`Remove ${component.name} and its tracking setup? Project files stay unchanged.`, { modal: true }, 'Remove Component') !== 'Remove Component') return;
+            const linked = metadataComponent(definition)?.id === component.id;
+            if (await vscode.window.showWarningMessage(`Remove ${component.name} and its tracking setup?${linked ? ' Its metadata version and component reference will also be removed.' : ''} Version source and target files stay unchanged.`, { modal: true }, 'Remove Component') !== 'Remove Component') return;
+            if (linked) { delete definition.metadata.component; delete definition.metadata.version; }
             definition.components = definition.components.filter(item => item.id !== component.id);
         }
         await saveDefinition(folder, definition, expected);
@@ -382,7 +398,7 @@ function createController(context) {
         try { await vscode.workspace.fs.stat(uri); }
         catch (error) {
             if (error.code !== 'FileNotFound') throw error;
-            await write(() => storage.createFile(folder.uri));
+            await write(() => storage.createFile(folder.uri, folder.name));
         }
         const document = await vscode.workspace.openTextDocument(uri);
         await vscode.window.showTextDocument(document, { preview: false });
@@ -402,7 +418,7 @@ function createController(context) {
             { label: 'Project name + v', prefix: '{project} v' },
             { label: 'Project name + V', prefix: '{project} V' }
         ].map(choice => ({ ...choice,
-            description: selected?.version ? choice.prefix.replace(/\{project\}/g, () => folder.name) + selected.version : undefined,
+            description: selected?.version ? choice.prefix.replace(/\{project\}/g, () => expected.metadata?.name || folder.name) + selected.version : undefined,
             detail: choice.prefix === current ? 'Current prefix' : undefined
         }));
         choices.push({ label: '$(edit) Custom text…', custom: true });
@@ -422,10 +438,32 @@ function createController(context) {
         await saveDefinition(folder, definition, expected);
     }
 
+    async function configureMetadata(folder) {
+        const inspection = await refresh(folder); if (inspection.error) throw new Error(inspection.error);
+        if (!inspection.components.length) throw new Error('Add a component before configuring project version metadata.');
+        const expected = await storage.read(folder.uri);
+        const selected = inspection.components.length === 1 ? inspection.components[0] :
+            (await vscode.window.showQuickPick(inspection.components.map(report => ({ label: report.component.name,
+                description: report.version || 'Invalid version source', detail: metadataComponent(expected)?.id === report.component.id ? 'Current metadata version component' : undefined, report })),
+            { title: 'Project metadata version', placeHolder: 'Choose the component whose version build tools will read' }))?.report;
+        if (!selected) return;
+        if (!selected.version) throw new Error('Repair the component source before configuring project version metadata.');
+        const definition = clone(expected);
+        const name = await input('Project name', expected.metadata?.name || folder.name, value => {
+            validateDefinition({ ...definition, metadata: { name: value, component: selected.component.name, version: selected.version } });
+        });
+        if (name === undefined) return;
+        definition.metadata = { name, component: selected.component.name, version: selected.version };
+        assertUnchanged(inspection.documents);
+        await saveDefinition(folder, definition, expected);
+        await openConfiguration({ folder });
+    }
+
     async function manageProject(node) {
         const folder = await chooseFolder(node); if (!folder) return;
         const action = await vscode.window.showQuickPick([
             { label: 'Open project configuration', action: 'config' },
+            { label: 'Configure project metadata', action: 'metadata' },
             { label: '$(edit) Change version prefix', action: 'prefix' },
             { label: 'Add component', action: 'add' }, { label: 'Manage component', action: 'component' },
             { label: 'Export setup', action: 'export' }, { label: 'Import setup', action: 'import' },
@@ -433,6 +471,7 @@ function createController(context) {
         ], { title: `Manage project: ${folder.name}`, placeHolder: 'Search project actions' });
         if (!action) return;
         if (action.action === 'config') return openConfiguration({ folder });
+        if (action.action === 'metadata') return configureMetadata(folder);
         if (action.action === 'prefix') return changeVersionPrefix(folder);
         if (action.action === 'add') return addComponent({ folder });
         if (action.action === 'component') return manageComponent({ folder });
@@ -520,7 +559,7 @@ function createController(context) {
             disposed = true;
             for (const timer of timers.values()) clearTimeout(timer);
             for (const watcher of watchers.values()) watcher.dispose();
-            view.dispose();
+            preview.dispose(); view.dispose();
         }
     };
 }

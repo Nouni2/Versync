@@ -3,6 +3,7 @@
 
 const vscode = require('vscode');
 const { identity } = require('../backend/project');
+const { metadataComponent } = require('../backend/definition');
 const { formatLabel } = require('./configuration');
 
 function createView(reports, selectedComponent) {
@@ -33,6 +34,8 @@ function createView(reports, selectedComponent) {
                     entry: node.report.entries.find(entry => index === 0 ? entry.source : !entry.source && entry.index === index - 1),
                     report: node.report
                 }));
+                const metadata = node.report.entries.find(entry => entry.metadata);
+                if (metadata) children.push({ kind: 'metadata', folder: node.folder, componentId: component.id, entry: metadata });
                 children.push({ kind: 'discover', folder: node.folder, componentId: component.id });
                 return children;
             }
@@ -43,9 +46,13 @@ function createView(reports, selectedComponent) {
             const none = vscode.TreeItemCollapsibleState.None;
             let item;
             if (node.kind === 'folder') {
-                item = new vscode.TreeItem(node.folder.name, expanded);
+                const report = reports.get(identity(node.folder.uri)), metadata = report?.definition?.metadata;
+                const linked = report?.definition && metadataComponent(report.definition);
+                item = new vscode.TreeItem(metadata?.name || node.folder.name, expanded);
                 item.id = JSON.stringify([identity(node.folder.uri)]);
-                if (reports.get(identity(node.folder.uri))?.definition?.fileConfiguration) item.description = 'versync.json';
+                item.description = [metadata?.version, report?.definition?.fileConfiguration ? 'versync.json' : undefined].filter(value => value !== undefined).join(' · ');
+                item.tooltip = [node.folder.name, metadata?.version !== undefined ? `Project version: ${metadata.version}` : undefined,
+                    linked ? `Version from: ${linked.name}` : undefined].filter(Boolean).join('\n');
                 item.iconPath = new vscode.ThemeIcon('folder');
                 item.contextValue = 'versync.project';
             } else if (node.kind === 'component') {
@@ -56,6 +63,14 @@ function createView(reports, selectedComponent) {
                 item.iconPath = new vscode.ThemeIcon(node.report.issues.length ? 'warning' : 'versions');
                 item.contextValue = 'versync.component';
                 item.command = { command: 'versync.actions', title: 'Component actions', arguments: [node] };
+            } else if (node.kind === 'metadata') {
+                item = new vscode.TreeItem('versync.json · metadata.version', none);
+                item.id = JSON.stringify([identity(node.folder.uri), node.componentId, 'metadata']);
+                item.description = node.entry.value;
+                const mismatch = node.entry.value !== node.entry.expected;
+                item.iconPath = new vscode.ThemeIcon(mismatch ? 'warning' : 'check');
+                item.tooltip = `Project version: ${node.entry.value}\nExpected: ${node.entry.expected}\nSynchronized copy of the component source. Click to open.`;
+                item.command = { command: 'versync.openTarget', title: 'Open metadata version', arguments: [node] };
             } else if (node.kind === 'location') {
                 item = new vscode.TreeItem(node.location.file, none);
                 item.id = JSON.stringify([identity(node.folder.uri), node.componentId, node.targetIndex]);
@@ -114,7 +129,8 @@ function createView(reports, selectedComponent) {
         const folder = active && vscode.workspace.getWorkspaceFolder(active) || folders.find(item => identity(item.uri) === lastFolder) || folders[0];
         lastFolder = folder && identity(folder.uri);
         const report = folder && reports.get(identity(folder.uri));
-        const selected = report?.components?.find(item => item.component.id === selectedComponent(folder)) || report?.components?.[0];
+        const selected = report?.components?.find(item => item.component.id === selectedComponent(folder)) ||
+            report?.components?.find(item => item.component.id === metadataComponent(report.definition)?.id) || report?.components?.[0];
         status.backgroundColor = undefined;
         if (!folder) {
             status.text = '$(versions) Versync';
@@ -131,9 +147,11 @@ function createView(reports, selectedComponent) {
         } else {
             const configuredPrefix = report.definition.statusBarPrefix ?? vscode.workspace.getConfiguration('versync', folder.uri).get('statusBarPrefix', 'v');
             const prefix = typeof configuredPrefix === 'string' ? configuredPrefix : 'v';
-            status.text = prefix.replace(/\{(project|component)\}/g, (_, name) => name === 'project' ? folder.name : selected.component.name) + (selected.version || '?');
+            const projectName = report.definition.metadata?.name || folder.name;
+            status.text = prefix.replace(/\{(project|component)\}/g, (_, name) => name === 'project' ? projectName : selected.component.name) + (selected.version || '?');
             status.tooltip = report.issues.length ? `${folder.name}: ${report.issues.length} version ${report.issues.length === 1 ? 'issue' : 'issues'}. Click for actions.` :
                 `${folder.name}: ${selected.component.targets.length} target ${selected.component.targets.length === 1 ? 'field' : 'fields'}. Click for actions.`;
+            if (report.definition.metadata?.version !== undefined) status.tooltip += `\n${projectName}: project version ${report.definition.metadata.version}.`;
         }
         if (report?.error || report?.issues?.length) status.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
     }
