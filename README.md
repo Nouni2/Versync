@@ -1,4 +1,4 @@
-# Versync v1.1.0
+# Versync v1.1.1
 
 Versync is a VS Code extension that helps you synchronize version numbers across selected project files. You can set a version, bump it using optional versioning rules, or check for mismatches.
 
