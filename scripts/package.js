@@ -109,6 +109,7 @@ const vsixManifest = `<?xml version="1.0" encoding="utf-8"?>
     <DisplayName>${xml(manifest.displayName)}</DisplayName>
     <Description xml:space="preserve">${xml(manifest.description)}</Description>
     <Categories>Other</Categories>
+    <GalleryFlags>Public</GalleryFlags>
     <Properties>
       <Property Id="Microsoft.VisualStudio.Code.Engine" Value="${xml(manifest.engines.vscode)}" />
     </Properties>
