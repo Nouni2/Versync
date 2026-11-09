@@ -61,7 +61,7 @@ function content(plan) {
         <button type="button" class="secondary" data-action="discard">Discard</button>
     </div>
     <p class="guidance">Apply Selected applies checked changes. Apply All applies every proposed change, including unchecked changes. Unchecked fields may remain out of sync.</p>
-    <p class="guidance">Changes are made in the editor. Save the edited files before building; your Auto Save settings apply.</p>
+    <p class="guidance">Applying saves the affected files. Save existing changes in those files, the version source and project configuration first.</p>
     <p id="error" role="alert" hidden></p>
 </header>
 <main>${groups}</main>
@@ -153,7 +153,11 @@ function createPreview() {
                             panel.dispose();
                         }
                     } catch (error) {
-                        if (!closed) void panel.webview.postMessage({ type: 'error', message: error.message });
+                        if (error.changesApplied) {
+                            resolve(false);
+                            panel.dispose();
+                            void vscode.window.showErrorMessage(`Versync: ${error.message}`);
+                        } else if (!closed) void panel.webview.postMessage({ type: 'error', message: error.message });
                         else { resolve(false); void vscode.window.showErrorMessage(`Versync: ${error.message}`); }
                     } finally { applying = false; }
                 });

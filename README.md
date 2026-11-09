@@ -1,4 +1,4 @@
-# Versync v1.1.1
+# Versync v1.2.0
 
 Versync is a VS Code extension that helps you synchronize version numbers across selected project files. You can set a version, bump it using optional versioning rules, or check for mismatches.
 
@@ -12,7 +12,7 @@ Open a project folder in VS Code and select Versync in the Activity Bar.
 2. Name the component and choose **Manual versions** or semantic versioning rules.
 3. Use **Find Version Copies** to review possible targets. Select the fields to track and their formats. Discovery leaves fields unregistered until you select them.
 4. Click the Versync status bar item or a component to open its actions: **Bump**, **Check**, **Downgrade** or **Enter Version**. Version edits open **Versync: Review Changes**, showing the version transition, file count and change count. Click a change to inspect its diff. Use **Check All / Uncheck All**, then **Apply Selected** for checked changes or **Apply All** for every proposed change, including unchecked changes. **Discard** closes the preview without applying it. Apply all proposed edits to keep the source, targets and metadata version synchronized. The gear button opens project management; **Synchronize Current Version** is also available from the Command Palette.
-5. Review and save the edited documents. Your VS Code Auto Save settings apply.
+5. Applying saves the affected files automatically. If an affected file, the version source or the project configuration has unsaved changes, Versync refuses to apply anything and lists the files to save first. Save them, then review and apply again. If saving fails after edits are applied, Versync reports the files confirmed saved and those not confirmed saved. Review the files and save any remaining changes before opening a new preview; files already saved are not rolled back.
 
 To add a field later, select its complete version string and run **Versync: Track Selected Version**. For unusual file syntax, **Add Target Using Pattern** accepts a JavaScript regular expression with a named `(?<version>...)` capture. The pattern must identify one field in that file.
 
@@ -57,7 +57,7 @@ Use **Manage Project → Configure project metadata** to set a project name and 
 
 `metadata.version` is an informative, plain version copy. The selected component's source file remains authoritative. Version changes include the metadata field in the same review as other targets. **Check Versions** reports a mismatch when it differs from its source; **Synchronize Current Version** proposes repairing it. Unchecking that edit leaves the metadata unchanged, just as with any other target.
 
-Build tools can read `.vscode/versync.json` at `metadata.version` and use it to select output folders such as `build/publish/v1.0.0/` and `build/publish/v1.0.1/`. Save the edited documents before building; changes in unsaved editors are not yet available to tools reading from disk.
+Build tools can read `.vscode/versync.json` at `metadata.version` and use it to select output folders such as `build/publish/v1.0.0/` and `build/publish/v1.0.1/`. Applying version changes saves the affected files, including selected metadata changes, before completing. Resolve any reported save failure before building.
 
 New configuration files populate metadata from the source automatically when there is one component with a readable, valid version. With multiple components, use **Configure project metadata** to select one explicitly. A name-only metadata object is allowed without enabling version tracking. When `version` is supplied, `component` can be omitted only for a single-component project; setting it explicitly keeps the association clear if more components are added. Renaming the selected component updates the reference, and removing it removes the metadata version and reference while keeping the project name.
 

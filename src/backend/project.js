@@ -140,6 +140,7 @@ async function ensureWritable(snapshot) {
 }
 
 function validateProjectedChanges(inspection, changes) {
+    const texts = new Map();
     for (const snapshot of inspection.documents.values()) {
         const edits = changes.filter(change => change.snapshot === snapshot).sort((a, b) => b.start - a.start);
         if (!edits.length) continue;
@@ -155,7 +156,9 @@ function validateProjectedChanges(inspection, changes) {
                 throw new Error(`${entry.caption}: its pattern would no longer identify the same field after this update. Edit the pattern first.`);
             }
         }
+        texts.set(snapshot, text);
     }
+    return texts;
 }
 
 async function planChanges(folder, definition, requests) {
@@ -188,12 +191,51 @@ async function applyChanges(plan, selected = plan.changes) {
     if (!vscode.workspace.isTrusted) throw new Error('Trust this workspace before changing versions.');
     if (!selected.length) return false;
     if (new Set(selected).size !== selected.length || selected.some(change => !plan.changes.includes(change))) throw new Error('Choose changes from the current preview.');
-    for (const snapshot of new Set(selected.map(change => change.snapshot))) await ensureWritable(snapshot);
+    const affected = new Set(selected.map(change => change.snapshot));
+    const inputs = new Set(affected), componentIds = new Set(selected.map(change => change.componentId));
+    for (const report of plan.components.filter(report => componentIds.has(report.component.id))) {
+        inputs.add(report.entries.find(entry => entry.source).snapshot);
+    }
+    if (plan.definition.fileConfiguration) inputs.add(plan.documents.get(identity(plan.definition.fileConfiguration.uri)));
+    function requireSavedInputs() {
+        const dirty = [...inputs].filter(snapshot => snapshot.document.isDirty);
+        if (dirty.length) throw new Error(`Save these files first, then review and apply again:\n${dirty.map(snapshot => snapshot.file).join('\n')}`);
+    }
+    requireSavedInputs();
+    for (const snapshot of affected) await ensureWritable(snapshot);
+    requireSavedInputs();
     assertUnchanged(plan.documents);
-    validateProjectedChanges(plan, selected);
+    const texts = validateProjectedChanges(plan, selected);
     const edit = new vscode.WorkspaceEdit();
     for (const change of selected) edit.replace(change.snapshot.uri, change.range, change.replacement);
     if (!await vscode.workspace.applyEdit(edit)) throw new Error('Could not apply the selected changes. Review a new preview.');
+    const saved = new Set();
+    try {
+        for (const snapshot of affected) {
+            const document = snapshot.document;
+            if (document.isClosed || document.getText() !== texts.get(snapshot)) throw new Error(`${snapshot.file}: the document changed after applying. It was not saved by this operation.`);
+            if (document.isDirty && !await document.save()) throw new Error(`${snapshot.file}: could not save the file.`);
+            if (document.isClosed || document.isDirty) throw new Error(`${snapshot.file}: saving did not leave a saved document.`);
+            saved.add(snapshot);
+        }
+        const entries = plan.components.flatMap(report => report.entries);
+        for (const snapshot of affected) {
+            if (snapshot.document.isClosed || snapshot.document.isDirty) throw new Error(`${snapshot.file}: the document changed or closed during saving.`);
+            const text = snapshot.document.getText();
+            for (const entry of entries.filter(entry => entry.snapshot === snapshot)) {
+                const change = selected.find(change => change.componentId === entry.componentId && change.source === entry.source && change.index === entry.index);
+                const expected = change ? change.next : entry.value;
+                const actual = entry.metadata ? property(text, ['metadata', 'version']) : locate(text, entry.pattern, entry.caption);
+                if (actual.value !== expected) throw new Error(`${entry.caption}: the version changed during saving. Review the saved file.`);
+            }
+        }
+    } catch (error) {
+        const confirmed = [...saved].filter(snapshot => !snapshot.document.isClosed && !snapshot.document.isDirty);
+        const remaining = [...affected].filter(snapshot => !confirmed.includes(snapshot));
+        const failure = new Error(`Version edits were applied, but the operation could not be completed.\n${error.message}\nConfirmed saved: ${confirmed.map(snapshot => snapshot.file).join(', ') || 'none'}.\nNot confirmed saved: ${remaining.map(snapshot => snapshot.file).join(', ') || 'none'}.\nReview the files and save any remaining changes before opening a new preview. No changes were rolled back.`);
+        failure.changesApplied = true;
+        throw failure;
+    }
     return true;
 }
 
